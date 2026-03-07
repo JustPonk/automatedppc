@@ -1,63 +1,101 @@
-import Image from "next/image";
+import Link from "next/link";
 
 export default function Home() {
+  const locations = [
+    {
+      name: "Pisco",
+      description: "Procesamiento automatizado de accesos PEPIS PV1",
+      color: "from-blue-500 to-blue-600",
+      hoverColor: "hover:from-blue-600 hover:to-blue-700",
+      icon: "🏭",
+      path: "/pisco"
+    },
+    {
+      name: "Malvinas",
+      description: "Procesamiento de datos Malvinas (Próximamente)",
+      color: "from-purple-500 to-purple-600",
+      hoverColor: "hover:from-purple-600 hover:to-purple-700",
+      icon: "⚡",
+      path: "/malvinas"
+    },
+    {
+      name: "Lima",
+      description: "Procesamiento de datos Lima (Próximamente)",
+      color: "from-green-500 to-green-600",
+      hoverColor: "hover:from-green-600 hover:to-green-700",
+      icon: "🌆",
+      path: "/lima"
+    }
+  ];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-gray-100 dark:from-gray-900 dark:via-blue-950 dark:to-gray-900">
+      <main className="flex min-h-screen flex-col items-center justify-center p-8">
+        {/* Welcome Header */}
+        <div className="text-center mb-16 animate-fade-in">
+          <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 bg-clip-text text-transparent">
+            Jeff Automates
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Plataforma automatizada de procesamiento de archivos Excel para operaciones
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        {/* Location Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full">
+          {locations.map((location) => (
+            <Link
+              key={location.name}
+              href={location.path}
+              className={`
+                relative group
+                bg-white dark:bg-gray-800 rounded-2xl shadow-xl
+                p-8 transition-all duration-300
+                hover:shadow-2xl hover:-translate-y-2
+                border border-gray-200 dark:border-gray-700
+              `}
+            >
+              {/* Icon */}
+              <div className="text-6xl mb-4">{location.icon}</div>
+              
+              {/* Title */}
+              <h2 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white">
+                {location.name}
+              </h2>
+              
+              {/* Description */}
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {location.description}
+              </p>
+              
+              {/* Button */}
+              <div className={`
+                inline-flex items-center gap-2 px-6 py-3 rounded-lg
+                bg-gradient-to-r ${location.color} ${location.hoverColor}
+                text-white font-medium
+                transition-all duration-300
+                group-hover:gap-4
+              `}>
+                Acceder
+                <span className="text-xl">→</span>
+              </div>
+
+              {/* Decorative gradient */}
+              <div className={`
+                absolute top-0 right-0 w-32 h-32 
+                bg-gradient-to-br ${location.color}
+                opacity-10 rounded-2xl
+                group-hover:opacity-20 transition-opacity
+              `} />
+            </Link>
+          ))}
+        </div>
+
+        {/* Footer Info */}
+        <div className="mt-16 text-center text-gray-500 dark:text-gray-500">
+          <p className="text-sm">
+            Selecciona una ubicación para comenzar a procesar tus archivos
+          </p>
         </div>
       </main>
     </div>
