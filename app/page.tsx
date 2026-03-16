@@ -1,6 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { allowedPathsFor } from "@/lib/auth/permissions";
 
 export default function Home() {
+  const { user } = useAuth();
+  const allowed = allowedPathsFor(user);
+
   const locations = [
     {
       name: "Pisco",
@@ -25,6 +32,14 @@ export default function Home() {
       hoverColor: "hover:from-green-600 hover:to-green-700",
       icon: "🌆",
       path: "/lima"
+    },
+    {
+      name: "KPIS data",
+      description: "Formulario dinámico para consolidado KPI y generación XLSX",
+      color: "from-amber-500 to-orange-500",
+      hoverColor: "hover:from-amber-600 hover:to-orange-600",
+      icon: "📊",
+      path: "/kpis-data"
     }
   ];
 
@@ -34,16 +49,18 @@ export default function Home() {
         {/* Welcome Header */}
         <div className="text-center mb-16 animate-fade-in">
           <h1 className="text-6xl font-bold mb-4 bg-gradient-to-r from-blue-600 via-purple-600 to-green-600 bg-clip-text text-transparent">
-            Jeff Automates
+            Automated Data
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Plataforma automatizada de procesamiento de archivos Excel para operaciones
+            Plataforma automatizada de datos y operaciones
           </p>
         </div>
 
         {/* Location Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full">
-          {locations.map((location) => (
+        <div className="grid grid-cols-1 gap-8 max-w-6xl w-full md:grid-cols-2 xl:grid-cols-4">
+          {locations.map((location) => {
+            const isAllowed = allowed === null || allowed.some((p) => location.path === p || location.path.startsWith(`${p}/`));
+            return (
             <Link
               key={location.name}
               href={location.path}
@@ -53,6 +70,7 @@ export default function Home() {
                 p-8 transition-all duration-300
                 hover:shadow-2xl hover:-translate-y-2
                 border border-gray-200 dark:border-gray-700
+                ${!isAllowed ? 'opacity-50 pointer-events-none' : ''}
               `}
             >
               {/* Icon */}
@@ -75,8 +93,9 @@ export default function Home() {
                 text-white font-medium
                 transition-all duration-300
                 group-hover:gap-4
+                ${!isAllowed ? 'grayscale' : ''}
               `}>
-                Acceder
+                {isAllowed ? 'Acceder' : 'Sin acceso'}
                 <span className="text-xl">→</span>
               </div>
 
@@ -88,7 +107,8 @@ export default function Home() {
                 group-hover:opacity-20 transition-opacity
               `} />
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer Info */}
