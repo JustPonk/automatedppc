@@ -45,4 +45,5 @@ export interface KpiDetailRow {
   actividad: string;
   montoUsd: number;
   montoSoles: number;
+  autor: string;
 }

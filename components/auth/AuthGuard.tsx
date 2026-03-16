@@ -12,12 +12,14 @@ const ALLOWED_PUBLIC = [
 ];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, hydrated } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
+    if (!hydrated) return;
+
     const isPublic = ALLOWED_PUBLIC.some((p) => pathname.startsWith(p));
 
     if (!user && !isPublic) {
@@ -32,7 +34,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
 
     setChecked(true);
-  }, [pathname, router, user]);
+  }, [hydrated, pathname, router, user]);
+
+  if (!hydrated) {
+    return null;
+  }
 
   if (!checked && !user && !ALLOWED_PUBLIC.some((p) => pathname.startsWith(p))) {
     return null;

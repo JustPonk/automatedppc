@@ -9,6 +9,7 @@ export type AuthUser = {
 
 interface AuthContextValue {
   user: AuthUser | null;
+  hydrated: boolean;
   login: (user: AuthUser) => void;
   logout: () => void;
 }
@@ -32,13 +33,17 @@ function getStoredUser(): AuthUser | null {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
+  // Load client-side user after mount to avoid SSR/CSR mismatch
   useEffect(() => {
     setUser(getStoredUser());
+    setHydrated(true);
   }, []);
 
   const value = useMemo(() => ({
     user,
+    hydrated,
     login: (nextUser: AuthUser) => {
       setUser(nextUser);
       if (typeof window !== "undefined") {
@@ -51,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.localStorage.removeItem("ja_auth_user");
       }
     }
-  }), [user]);
+  }), [hydrated, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
