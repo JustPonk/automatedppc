@@ -18,29 +18,16 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      // Provisional: sin Supabase. Solo validamos que haya usuario y contraseña.
-      if (!username || !password) {
-        throw new Error('Credenciales inválidas');
-      }
-
-      // Caso especial solicitado: jeff / 123 entra como nivel 10
-      if (username === 'jeff' && password === '123') {
+      // Bloquear ingreso para todos los usuarios.
+      // Únicamente "jeff" con pass "neron5252" tiene permitido el acceso.
+      if (username === 'jeff' && password === 'neron5252') {
         login({ email: 'jeff', level: 10 });
         router.push('/level10');
         router.refresh();
         return;
-      } else if (username === 'vherrera' && password === 'ppc123') {
-        // Nuevo usuario nivel 5 restringido a KPIS
-        login({ email: 'vherrera', level: 5 });
-        router.push('/');
-        router.refresh();
-        return;
-      } else {
-        // Resto: acceso básico nivel 1
-        login({ email: username, level: 1 });
-        router.push('/');
       }
-      router.refresh();
+      
+      throw new Error('Credenciales inválidas o acceso no autorizado.');
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
     } finally {

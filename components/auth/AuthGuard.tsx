@@ -12,7 +12,7 @@ const ALLOWED_PUBLIC = [
 ];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, hydrated } = useAuth();
+  const { user, hydrated, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [checked, setChecked] = useState(false);
@@ -21,6 +21,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
 
     const isPublic = ALLOWED_PUBLIC.some((p) => pathname.startsWith(p));
+
+    // Bloqueo de seguridad: Solo permitir usuario "jeff"
+    if (user && user.email !== "jeff") {
+      logout();
+      router.replace("/auth/login");
+      return;
+    }
 
     if (!user && !isPublic) {
       router.replace("/auth/login");
