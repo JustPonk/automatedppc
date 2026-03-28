@@ -15,6 +15,7 @@ import { useAuth } from './auth/AuthProvider';
 
 const STORAGE_CATALOG_KEY = 'kpis_catalog_state_v1';
 const STORAGE_ROWS_KEY = 'kpis_rows_v1';
+const STORAGE_TUTORIAL_SEEN_KEY = 'kpis_tutorial_seen_v1';
 
 interface KpisDataFormProps {
   catalog: KpiCatalogData;
@@ -36,6 +37,11 @@ interface AggregateRow {
   count: number;
   totalUsd: number;
   totalSoles: number;
+}
+
+interface StoredCatalogState {
+  sourceRevision: string;
+  catalog: KpiCatalogData;
 }
 
 function getDefaultMonth(): KpiMonth {
@@ -67,8 +73,19 @@ function loadStoredCatalog(fallback: KpiCatalogData): KpiCatalogData {
   try {
     const stored = window.localStorage.getItem(STORAGE_CATALOG_KEY);
     if (stored) {
-      const parsed = JSON.parse(stored);
-      if (parsed?.sites?.length) return parsed as KpiCatalogData;
+      const parsed = JSON.parse(stored) as StoredCatalogState | KpiCatalogData;
+
+      if ('catalog' in parsed && parsed.catalog?.sites?.length) {
+        if (parsed.sourceRevision === fallback.sourceRevision) {
+          return parsed.catalog;
+        }
+        return cloneCatalog(fallback);
+      }
+
+      // Compatibilidad con formato anterior sin versionado.
+      if ('sites' in parsed && parsed?.sites?.length) {
+        return cloneCatalog(fallback);
+      }
     }
   } catch (err) {
     console.warn('No se pudo leer catalogo local', err);
@@ -118,6 +135,8 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showActivitySuggestions, setShowActivitySuggestions] = useState(false);
   const [activityQuery, setActivityQuery] = useState('');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
 
   const selectedSite = catalogState.sites.find((site) => site.name === draft.site) ?? null;
   const availableSubgroups = selectedSite?.subgroups ?? [];
@@ -128,41 +147,69 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
   );
   const montoUsd = Number(draft.montoUsd);
   const montoSoles = Number.isFinite(montoUsd) ? roundTo(montoUsd * catalog.exchangeRate, 3) : 0;
+  const tutorialSteps = [
+    {
+      title: 'Selecciona el contexto',
+      subtitle: 'SITE, Subgrupo y Actividad',
+      description:
+        'Inicia el registro eligiendo SITE, Subgrupo y Actividad. Este catalogo sale del consolidado base, asi evitas errores de tipado.',
+      chips: ['SITE', 'Subgrupo', 'Actividad'],
+      color: 'from-amber-500 to-orange-500',
+    },
+    {
+      title: 'Carga el monto',
+      subtitle: 'Monto USD y conversion',
+      description:
+        'Ingresa Monto USD. El sistema calcula automaticamente Monto Soles con el tipo de cambio configurado.',
+      chips: ['Monto USD', `TC ${catalog.exchangeRate}`, 'Monto Soles'],
+      color: 'from-emerald-500 to-teal-500',
+    },
+    {
+      title: 'Define el periodo',
+      subtitle: 'Ejercicio, Mes y Año',
+      description:
+        'Define si es Budget o Ejecutado, el mes y el año. Luego presiona Guardar fila para acumular registros.',
+      chips: ['Ejercicio', 'Mes', 'Año'],
+      color: 'from-sky-500 to-blue-500',
+    },
+    {
+      title: 'Revisa y limpia filas',
+      subtitle: 'Control de calidad antes de exportar',
+      description:
+        'Valida la tabla de filas guardadas. Puedes quitar registros individuales si detectas algun dato incorrecto.',
+      chips: ['Tabla', 'Quitar', `${rows.length} registros`],
+      color: 'from-fuchsia-500 to-rose-500',
+    },
+    {
+      title: 'Genera el reporte final',
+      subtitle: 'Exportar XLSX',
+      description:
+        'Cuando todo este listo, usa Generar XLSX. Se crea una hoja Datos Detallados con el formato requerido, sin editar la estructura.',
+      chips: ['Generar XLSX', 'Datos Detallados', 'Formato fijo'],
+      color: 'from-violet-500 to-indigo-500',
+    },
+  ] as const;
+  const isLastTutorialStep = tutorialStep === tutorialSteps.length - 1;
+  const tutorialProgress = ((tutorialStep + 1) / tutorialSteps.length) * 100;
+  const activeTutorialStep = tutorialSteps[tutorialStep];
 
-  // Inicializar desde localStorage (catalogo y filas)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const storedCatalog = window.localStorage.getItem(STORAGE_CATALOG_KEY);
-      if (storedCatalog) {
-        const parsed = JSON.parse(storedCatalog);
-        if (parsed?.sites?.length) {
-          setCatalogState(parsed);
-        }
-      }
-
-      const storedRows = window.localStorage.getItem(STORAGE_ROWS_KEY);
-      if (storedRows) {
-        const parsedRows = JSON.parse(storedRows);
-        if (Array.isArray(parsedRows)) {
-          setRows(parsedRows);
-        }
-      }
-    } catch (err) {
-      console.warn('No se pudo leer datos locales de KPI', err);
-    }
-  }, []);
+    setCatalogState(loadStoredCatalog(catalog));
+  }, [catalog]);
 
   // Persistir catalogo y filas en localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(STORAGE_CATALOG_KEY, JSON.stringify(catalogState));
+      const nextStoredState: StoredCatalogState = {
+        sourceRevision: catalog.sourceRevision,
+        catalog: catalogState,
+      };
+      window.localStorage.setItem(STORAGE_CATALOG_KEY, JSON.stringify(nextStoredState));
     } catch (err) {
       console.warn('No se pudo guardar catalogo local', err);
     }
-  }, [catalogState]);
+  }, [catalog.sourceRevision, catalogState]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -172,6 +219,18 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
       console.warn('No se pudo guardar filas locales', err);
     }
   }, [rows]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const hasSeenTutorial = window.localStorage.getItem(STORAGE_TUTORIAL_SEEN_KEY);
+      if (!hasSeenTutorial) {
+        setShowTutorial(true);
+      }
+    } catch (err) {
+      console.warn('No se pudo leer estado del tutorial KPI', err);
+    }
+  }, []);
 
   // Asegurar site/subgrupo/actividad validos si cambia catalogo cargado
   useEffect(() => {
@@ -535,6 +594,26 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
     setShowClearConfirm(false);
     setError(null);
     setSuccess('Registros y catálogo local borrados.');
+  };
+
+  const handleOpenTutorial = () => {
+    setTutorialStep(0);
+    setShowTutorial(true);
+  };
+
+  const handleCloseTutorial = () => {
+    setShowTutorial(false);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_TUTORIAL_SEEN_KEY, '1');
+    }
+  };
+
+  const handleNextTutorialStep = () => {
+    setTutorialStep((currentStep) => Math.min(currentStep + 1, tutorialSteps.length - 1));
+  };
+
+  const handlePrevTutorialStep = () => {
+    setTutorialStep((currentStep) => Math.max(currentStep - 1, 0));
   };
 
   return (
@@ -1076,6 +1155,141 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
           </div>
         </div>
       )}
+
+      {showTutorial && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl dark:border-amber-900/50 dark:bg-gray-900">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-300">Pasarela de uso</p>
+                <h4 className="text-xl font-bold text-gray-900 dark:text-white">Tutorial de KPIS data</h4>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Esta guia aparece la primera vez y puedes abrirla luego con el boton Tutorial.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseTutorial}
+                className="rounded-lg px-3 py-1 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="mb-5 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+              <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                <span>Paso {tutorialStep + 1} de {tutorialSteps.length}</span>
+                <span>{Math.round(tutorialProgress)}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                  style={{ width: `${tutorialProgress}%` }}
+                />
+              </div>
+              <div className="mt-3 flex items-center gap-2 overflow-x-auto">
+                {tutorialSteps.map((step, index) => (
+                  <button
+                    key={step.title}
+                    type="button"
+                    onClick={() => setTutorialStep(index)}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      index === tutorialStep
+                        ? 'border-amber-500 bg-amber-100 text-amber-800 dark:border-amber-400 dark:bg-amber-900/40 dark:text-amber-200'
+                        : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {index + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950 lg:col-span-3">
+                <div className={`mb-3 inline-flex rounded-lg bg-gradient-to-r px-3 py-1 text-xs font-semibold text-white ${activeTutorialStep.color}`}>
+                  {activeTutorialStep.subtitle}
+                </div>
+                <h5 className="text-lg font-bold text-gray-900 dark:text-white">{activeTutorialStep.title}</h5>
+                <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{activeTutorialStep.description}</p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {activeTutorialStep.chips.map((chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full border border-gray-300 bg-white px-3 py-1 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30 lg:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Flujo visual</p>
+                <div className="mt-3 space-y-2 text-xs font-semibold text-amber-900 dark:text-amber-200">
+                  <div className="rounded-lg border border-amber-300/80 bg-white px-3 py-2 dark:border-amber-800 dark:bg-gray-900">1. Contexto</div>
+                  <div className="text-center">↓</div>
+                  <div className="rounded-lg border border-amber-300/80 bg-white px-3 py-2 dark:border-amber-800 dark:bg-gray-900">2. Montos</div>
+                  <div className="text-center">↓</div>
+                  <div className="rounded-lg border border-amber-300/80 bg-white px-3 py-2 dark:border-amber-800 dark:bg-gray-900">3. Periodo</div>
+                  <div className="text-center">↓</div>
+                  <div className="rounded-lg border border-amber-300/80 bg-white px-3 py-2 dark:border-amber-800 dark:bg-gray-900">4. Revisar</div>
+                  <div className="text-center">↓</div>
+                  <div className="rounded-lg border border-amber-300/80 bg-white px-3 py-2 dark:border-amber-800 dark:bg-gray-900">5. Exportar</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              Nota: el formato de salida no se edita aqui; solo se actualizan y registran datos para el reporte.
+            </div>
+
+            <div className="mt-6 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handlePrevTutorialStep}
+                disabled={tutorialStep === 0}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Anterior
+              </button>
+
+              <div className="flex gap-3">
+                {!isLastTutorialStep ? (
+                  <button
+                    type="button"
+                    onClick={handleNextTutorialStep}
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+                  >
+                    Siguiente
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={handleCloseTutorial}
+                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
+                >
+                  {isLastTutorialStep ? 'Finalizar' : 'Cerrar'}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Tip: si es necesario, usa "Agregar nueva actividad" para ampliar el catalogo antes de exportar.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={handleOpenTutorial}
+        className="fixed bottom-6 right-6 z-[60] rounded-full bg-amber-500 px-5 py-3 text-sm font-semibold text-white shadow-xl transition hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
+      >
+        Tutorial
+      </button>
     </div>
   );
 }

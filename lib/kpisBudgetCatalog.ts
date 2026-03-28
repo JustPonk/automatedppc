@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import path from 'path';
 import * as XLSX from 'xlsx';
 import {
@@ -43,6 +43,8 @@ export async function getKpisBudgetCatalog(): Promise<KpiCatalogData> {
   } catch {
     throw new Error(`No se pudo acceder al archivo KPI base en ${WORKBOOK_PATH}.`);
   }
+
+  const workbookStats = await stat(WORKBOOK_PATH);
 
   const workbookBuffer = await readFile(WORKBOOK_PATH);
   const workbook = XLSX.read(workbookBuffer, { type: 'buffer' });
@@ -116,6 +118,7 @@ export async function getKpisBudgetCatalog(): Promise<KpiCatalogData> {
     sites,
     years: [...years].sort((left, right) => left - right),
     sourceFileName: WORKBOOK_FILE_NAME,
+    sourceRevision: `${workbookStats.mtimeMs}-${rows.length}`,
     exchangeRate: KPI_EXCHANGE_RATE,
   };
 }

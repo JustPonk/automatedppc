@@ -33,6 +33,7 @@ export interface KpiCatalogData {
   sites: KpiCatalogSite[];
   years: number[];
   sourceFileName: string;
+  sourceRevision: string;
   exchangeRate: number;
 }
 
