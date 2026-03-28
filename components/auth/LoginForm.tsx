@@ -18,11 +18,17 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      // Bloquear ingreso para todos los usuarios.
-      // Únicamente "jeff" con pass "neron5252" tiene permitido el acceso.
+      // Credenciales habilitadas de forma temporal mientras Supabase está pendiente.
       if (username === 'jeff' && password === 'neron5252') {
         login({ email: 'jeff', level: 10 });
         router.push('/level10');
+        router.refresh();
+        return;
+      }
+
+      if (username === 'vherrera1' && password === 'pluspetrol123') {
+        login({ email: 'vherrera1', level: 5 });
+        router.push('/kpis-data');
         router.refresh();
         return;
       }

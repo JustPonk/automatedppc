@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
-import { isPathAllowed } from "@/lib/auth/permissions";
+import { allowedPathsFor, isPathAllowed } from "@/lib/auth/permissions";
 
 const ALLOWED_PUBLIC = [
   "/auth/login",
@@ -21,9 +21,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
 
     const isPublic = ALLOWED_PUBLIC.some((p) => pathname.startsWith(p));
+    const allowedUsers = new Set(["jeff", "vherrera1"]);
 
-    // Bloqueo de seguridad: Solo permitir usuario "jeff"
-    if (user && user.email !== "jeff") {
+    // Bloqueo de seguridad: solo permitir usuarios autorizados.
+    if (user && !allowedUsers.has(user.email)) {
       logout();
       router.replace("/auth/login");
       return;
@@ -36,7 +37,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
     // If logged in but route not allowed for this level, send to home
     if (user && !isPathAllowed(pathname, user)) {
-      router.replace("/");
+      const allowed = allowedPathsFor(user);
+      if (allowed && allowed.length > 0) {
+        router.replace(allowed[0]);
+      } else {
+        router.replace("/auth/login");
+      }
       return;
     }
 
