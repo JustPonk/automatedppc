@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
 import {
@@ -42,6 +42,27 @@ interface AggregateRow {
 interface StoredCatalogState {
   sourceRevision: string;
   catalog: KpiCatalogData;
+}
+
+interface KpiTotalsCard {
+  totalUsd: number;
+  totalSoles: number;
+  rows: number;
+}
+
+interface KpiSiteTotalRow {
+  site: string;
+  totalUsd: number;
+  totalSoles: number;
+  rows: number;
+}
+
+interface KpiSiteSubgroupTotalRow {
+  site: string;
+  subgrupo: string;
+  totalUsd: number;
+  totalSoles: number;
+  rows: number;
 }
 
 function getDefaultMonth(): KpiMonth {
@@ -137,6 +158,8 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
   const [activityQuery, setActivityQuery] = useState('');
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const activityInputRef = useRef<HTMLInputElement>(null);
 
   const selectedSite = catalogState.sites.find((site) => site.name === draft.site) ?? null;
   const availableSubgroups = selectedSite?.subgroups ?? [];
@@ -184,8 +207,8 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
       title: 'Genera el reporte final',
       subtitle: 'Exportar XLSX',
       description:
-        'Cuando todo este listo, usa Generar XLSX. Se crea una hoja Datos Detallados con el formato requerido, sin editar la estructura.',
-      chips: ['Generar XLSX', 'Datos Detallados', 'Formato fijo'],
+        'Cuando todo este listo, usa Generar Excel. Se crea una hoja Datos Detallados con el formato requerido, sin editar la estructura.',
+      chips: ['Generar Excel', 'Datos Detallados', 'Formato fijo'],
       color: 'from-violet-500 to-indigo-500',
     },
   ] as const;
@@ -368,8 +391,46 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
     }
   };
 
-  const handleExport = () => {
+  const handleClearActivityInput = () => {
+    handleChange('actividad', '');
+    setActivityQuery('');
+    setShowActivitySuggestions(false);
+    setTimeout(() => {
+      activityInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleToggleActivitySuggestions = () => {
+    if (showActivitySuggestions) {
+      setShowActivitySuggestions(false);
+      return;
+    }
+
+    setActivityQuery('');
+    setShowActivitySuggestions(true);
+    setTimeout(() => {
+      activityInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleOpenExportConfirm = () => {
     if (rows.length === 0) {
+      setError('Guarda al menos una fila antes de generar el XLSX.');
+      setSuccess(null);
+      return;
+    }
+
+    setShowExportConfirm(true);
+    setError(null);
+  };
+
+  const handleCloseExportConfirm = () => {
+    setShowExportConfirm(false);
+  };
+
+  const handleConfirmExport = () => {
+    if (rows.length === 0) {
+      setShowExportConfirm(false);
       setError('Guarda al menos una fila antes de generar el XLSX.');
       setSuccess(null);
       return;
@@ -418,6 +479,7 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
     });
 
     saveAs(blob, buildFileName());
+    setShowExportConfirm(false);
     setError(null);
     setSuccess('Archivo XLSX generado correctamente.');
   };
@@ -456,7 +518,59 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
   }, [] as AggregateRow[]);
 
   const totalMontoUsd = rows.reduce((sum, row) => sum + row.montoUsd, 0);
+  const totalMontoSoles = rows.reduce((sum, row) => sum + row.montoSoles, 0);
   const totalActividades = new Set(rows.map((row) => row.actividad)).size;
+  const totalsByExercise = rows.reduce<Record<KpiExercise, KpiTotalsCard>>(
+    (acc, row) => {
+      const target = acc[row.ejercicio];
+      target.totalUsd = roundTo(target.totalUsd + row.montoUsd, 3);
+      target.totalSoles = roundTo(target.totalSoles + row.montoSoles, 3);
+      target.rows += 1;
+      return acc;
+    },
+    {
+      Budget: { totalUsd: 0, totalSoles: 0, rows: 0 },
+      Ejecutado: { totalUsd: 0, totalSoles: 0, rows: 0 },
+    }
+  );
+  const siteTotals = Array.from(
+    rows
+      .reduce<Map<string, KpiSiteTotalRow>>((acc, row) => {
+        const current = acc.get(row.site) ?? {
+          site: row.site,
+          totalUsd: 0,
+          totalSoles: 0,
+          rows: 0,
+        };
+
+        current.totalUsd = roundTo(current.totalUsd + row.montoUsd, 3);
+        current.totalSoles = roundTo(current.totalSoles + row.montoSoles, 3);
+        current.rows += 1;
+        acc.set(row.site, current);
+        return acc;
+      }, new Map())
+      .values()
+  ).sort((left, right) => right.totalUsd - left.totalUsd);
+  const siteSubgroupTotals = Array.from(
+    rows
+      .reduce<Map<string, KpiSiteSubgroupTotalRow>>((acc, row) => {
+        const key = `${row.site}||${row.subgrupo}`;
+        const current = acc.get(key) ?? {
+          site: row.site,
+          subgrupo: row.subgrupo,
+          totalUsd: 0,
+          totalSoles: 0,
+          rows: 0,
+        };
+
+        current.totalUsd = roundTo(current.totalUsd + row.montoUsd, 3);
+        current.totalSoles = roundTo(current.totalSoles + row.montoSoles, 3);
+        current.rows += 1;
+        acc.set(key, current);
+        return acc;
+      }, new Map())
+      .values()
+  ).sort((left, right) => right.totalUsd - left.totalUsd);
   const highestCostActivity = rows.reduce<null | KpiDetailRow>((current, row) => {
     if (!current || row.montoUsd > current.montoUsd) return row;
     return current;
@@ -642,10 +756,10 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
             </button>
             <button
               type="button"
-              onClick={handleExport}
+              onClick={handleOpenExportConfirm}
               className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
             >
-              Generar XLSX
+              Generar Excel
             </button>
             <button
               type="button"
@@ -692,14 +806,40 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Actividad</span>
             <div className="relative">
               <input
+                ref={activityInputRef}
                 value={draft.actividad}
                 onChange={(event) => handleActivityInputChange(event.target.value)}
                 onFocus={() => setShowActivitySuggestions(true)}
                 onBlur={() => setTimeout(() => setShowActivitySuggestions(false), 120)}
                 onKeyDown={handleActivityKeyDown}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-amber-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
+                className="w-full rounded-xl border border-gray-300 bg-white py-3 pl-4 pr-20 text-sm text-gray-900 outline-none transition focus:border-amber-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
                 placeholder="Escribe para filtrar actividades"
               />
+
+              <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleClearActivityInput}
+                  disabled={!draft.actividad}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 text-xs font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  title="Limpiar actividad"
+                  aria-label="Limpiar actividad"
+                >
+                  X
+                </button>
+
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleToggleActivitySuggestions}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 text-xs font-bold text-gray-600 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  title="Abrir lista de actividades"
+                  aria-label="Abrir lista de actividades"
+                >
+                  {showActivitySuggestions ? '▴' : '▾'}
+                </button>
+              </div>
 
               {showActivitySuggestions && filteredActivities.length > 0 && (
                 <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-amber-200 bg-white shadow-lg dark:border-amber-900/40 dark:bg-gray-900">
@@ -1151,6 +1291,153 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
               >
                 Guardar actividad
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExportConfirm && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 px-4 py-6">
+          <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-2xl dark:border-amber-900/50 dark:bg-gray-900">
+            <div className="flex items-start justify-between border-b border-gray-200 p-6 dark:border-gray-800">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600 dark:text-amber-300">Confirmación KPI</p>
+                <h4 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">Resumen antes de generar Excel</h4>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Revisa todos los indicadores agregados en este reporte y confirma con GO para exportar.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseExportConfirm}
+                className="rounded-lg px-3 py-1 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-6 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Total Budget</p>
+                  <p className="mt-2 text-2xl font-bold text-emerald-800 dark:text-emerald-200">
+                    {totalsByExercise.Budget.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD
+                  </p>
+                  <p className="mt-1 text-sm text-emerald-700/90 dark:text-emerald-200/90">
+                    {totalsByExercise.Budget.totalSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} Soles · {totalsByExercise.Budget.rows} filas
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Total Ejecutado</p>
+                  <p className="mt-2 text-2xl font-bold text-blue-800 dark:text-blue-200">
+                    {totalsByExercise.Ejecutado.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD
+                  </p>
+                  <p className="mt-1 text-sm text-blue-700/90 dark:text-blue-200/90">
+                    {totalsByExercise.Ejecutado.totalSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} Soles · {totalsByExercise.Ejecutado.rows} filas
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/50 dark:bg-amber-950/20">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Total Reporte</p>
+                  <p className="mt-2 text-2xl font-bold text-amber-800 dark:text-amber-200">
+                    {totalMontoUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD
+                  </p>
+                  <p className="mt-1 text-sm text-amber-700/90 dark:text-amber-200/90">
+                    {totalMontoSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} Soles · {rows.length} filas
+                  </p>
+                </div>
+              </div>
+
+              <section className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+                <div className="mb-3 flex items-center justify-between">
+                  <h5 className="text-lg font-bold text-gray-900 dark:text-white">Total dinero por Site</h5>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Solo se muestran sites con datos en este reporte</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400">
+                        <th className="px-3 py-2 font-semibold">Site</th>
+                        <th className="px-3 py-2 font-semibold">Filas</th>
+                        <th className="px-3 py-2 font-semibold">Total USD</th>
+                        <th className="px-3 py-2 font-semibold">Total Soles</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {siteTotals.map((siteRow) => (
+                        <tr key={siteRow.site}>
+                          <td className="px-3 py-2 text-gray-900 dark:text-white">{siteRow.site}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{siteRow.rows}</td>
+                          <td className="px-3 py-2 font-semibold text-gray-900 dark:text-white">
+                            {siteRow.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                            {siteRow.totalSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950">
+                <div className="mb-3 flex items-center justify-between">
+                  <h5 className="text-lg font-bold text-gray-900 dark:text-white">Total dinero por Site y Subgrupo</h5>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Solo combinaciones agregadas en el reporte actual</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-800">
+                    <thead>
+                      <tr className="text-left text-gray-500 dark:text-gray-400">
+                        <th className="px-3 py-2 font-semibold">Site</th>
+                        <th className="px-3 py-2 font-semibold">Subgrupo</th>
+                        <th className="px-3 py-2 font-semibold">Filas</th>
+                        <th className="px-3 py-2 font-semibold">Total USD</th>
+                        <th className="px-3 py-2 font-semibold">Total Soles</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {siteSubgroupTotals.map((entry) => (
+                        <tr key={`${entry.site}-${entry.subgrupo}`}>
+                          <td className="px-3 py-2 text-gray-900 dark:text-white">{entry.site}</td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{entry.subgrupo}</td>
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{entry.rows}</td>
+                          <td className="px-3 py-2 font-semibold text-gray-900 dark:text-white">
+                            {entry.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                            {entry.totalSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-gray-200 p-5 dark:border-gray-800">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Al final de revisar todos los KPI, confirma en la esquina con GO para generar el Excel.
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseExportConfirm}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmExport}
+                  className="rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                >
+                  GO
+                </button>
+              </div>
             </div>
           </div>
         </div>
