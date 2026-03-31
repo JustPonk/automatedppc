@@ -159,6 +159,7 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [showMailAfterExport, setShowMailAfterExport] = useState(false);
   const activityInputRef = useRef<HTMLInputElement>(null);
 
   const selectedSite = catalogState.sites.find((site) => site.name === draft.site) ?? null;
@@ -420,6 +421,7 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
       return;
     }
 
+    setShowMailAfterExport(false);
     setShowExportConfirm(true);
     setError(null);
   };
@@ -480,8 +482,59 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
 
     saveAs(blob, buildFileName());
     setShowExportConfirm(false);
+    setShowMailAfterExport(true);
     setError(null);
     setSuccess('Archivo XLSX generado correctamente.');
+  };
+
+  const handleOpenMailDraft = () => {
+    if (rows.length === 0) {
+      setError('Guarda al menos una fila antes de preparar el correo.');
+      setSuccess(null);
+      return;
+    }
+
+    const to = 'vherrera01@pluspetrol.net';
+    const cc = 'jefersonfrancespe@gmail.com';
+    const reportDate = new Date().toISOString().split('T')[0];
+    const subject = `Reporte KPI Data ${reportDate}`;
+    const siteLines = siteTotals.map(
+      (siteRow) =>
+        `- ${siteRow.site}: ${siteRow.totalUsd.toLocaleString('en-US', {
+          minimumFractionDigits: 3,
+          maximumFractionDigits: 3,
+        })} USD (${siteRow.totalSoles.toLocaleString('en-US', {
+          minimumFractionDigits: 3,
+          maximumFractionDigits: 3,
+        })} Soles)`
+    );
+
+    const bodyLines = [
+      'Hola,',
+      '',
+      'Se comparte el resumen KPI del Excel generado:',
+      '',
+      `Total Budget: ${totalsByExercise.Budget.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD`,
+      `Total Ejecutado: ${totalsByExercise.Ejecutado.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD`,
+      `Total General: ${totalMontoUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD (${totalMontoSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} Soles)`,
+      `Total Filas: ${rows.length}`,
+      '',
+      'Totales por Site:',
+      ...siteLines,
+      '',
+      `Archivo sugerido: ${buildFileName()}`,
+      'Adjuntar el excel descargado en el correo antes de enviar.',
+      '',
+      'Saludos.',
+    ];
+
+    const mailtoUrl = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(cc)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join('\n'))}`;
+    setShowMailAfterExport(false);
+    window.location.href = mailtoUrl;
+  };
+
+  const handleCloseMailAfterExport = () => {
+    setShowMailAfterExport(false);
   };
 
   const handleRemoveRow = (rowIndex: number) => {
@@ -1419,9 +1472,14 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
             </div>
 
             <div className="flex items-center justify-between border-t border-gray-200 p-5 dark:border-gray-800">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Al final de revisar todos los KPI, confirma en la esquina con GO para generar el Excel.
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Al final de revisar todos los KPI, confirma en la esquina con GO para generar el Excel.
+                </p>
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  Adjuntar el excel descargado en el correo antes de enviarlo.
+                </p>
+              </div>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -1438,6 +1496,35 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
                   GO
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMailAfterExport && (
+        <div className="fixed inset-0 z-[76] flex items-center justify-center bg-black/65 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-blue-200 bg-white p-6 shadow-2xl dark:border-blue-900/50 dark:bg-gray-900">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-300">Paso siguiente</p>
+            <h4 className="mt-1 text-xl font-bold text-gray-900 dark:text-white">Excel generado correctamente</h4>
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+              Adjuntar el excel descargado en el correo antes de enviarlo.
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleCloseMailAfterExport}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenMailDraft}
+                className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                Enviar por correo
+              </button>
             </div>
           </div>
         </div>
