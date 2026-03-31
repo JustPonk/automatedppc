@@ -498,32 +498,108 @@ export default function KpisDataForm({ catalog }: KpisDataFormProps) {
     const cc = 'jefersonfrancespe@gmail.com';
     const reportDate = new Date().toISOString().split('T')[0];
     const subject = `Reporte KPI Data ${reportDate}`;
-    const siteLines = siteTotals.map(
-      (siteRow) =>
-        `- ${siteRow.site}: ${siteRow.totalUsd.toLocaleString('en-US', {
-          minimumFractionDigits: 3,
-          maximumFractionDigits: 3,
-        })} USD (${siteRow.totalSoles.toLocaleString('en-US', {
-          minimumFractionDigits: 3,
-          maximumFractionDigits: 3,
-        })} Soles)`
-    );
+    const formatUsd = (value: number) =>
+      value.toLocaleString('en-US', {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3,
+      });
+
+    const siteMailBlocks = Array.from(
+      rows.reduce<
+        Map<
+          string,
+          {
+            budgetUsd: number;
+            ejecutadoUsd: number;
+            subgroupMap: Map<
+              string,
+              {
+                budgetRows: number;
+                budgetUsd: number;
+                ejecutadoRows: number;
+                ejecutadoUsd: number;
+              }
+            >;
+          }
+        >
+      >((acc, row) => {
+        const siteEntry = acc.get(row.site) ?? {
+          budgetUsd: 0,
+          ejecutadoUsd: 0,
+          subgroupMap: new Map<
+            string,
+            {
+              budgetRows: number;
+              budgetUsd: number;
+              ejecutadoRows: number;
+              ejecutadoUsd: number;
+            }
+          >(),
+        };
+
+        if (row.ejercicio === 'Budget') {
+          siteEntry.budgetUsd = roundTo(siteEntry.budgetUsd + row.montoUsd, 3);
+        } else {
+          siteEntry.ejecutadoUsd = roundTo(siteEntry.ejecutadoUsd + row.montoUsd, 3);
+        }
+
+        const subgroupEntry = siteEntry.subgroupMap.get(row.subgrupo) ?? {
+          budgetRows: 0,
+          budgetUsd: 0,
+          ejecutadoRows: 0,
+          ejecutadoUsd: 0,
+        };
+
+        if (row.ejercicio === 'Budget') {
+          subgroupEntry.budgetRows += 1;
+          subgroupEntry.budgetUsd = roundTo(subgroupEntry.budgetUsd + row.montoUsd, 3);
+        } else {
+          subgroupEntry.ejecutadoRows += 1;
+          subgroupEntry.ejecutadoUsd = roundTo(subgroupEntry.ejecutadoUsd + row.montoUsd, 3);
+        }
+
+        siteEntry.subgroupMap.set(row.subgrupo, subgroupEntry);
+
+        acc.set(row.site, siteEntry);
+        return acc;
+      }, new Map())
+    )
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([siteName, siteEntry]) => {
+        const detailLines = Array.from(siteEntry.subgroupMap.entries())
+          .sort((left, right) => left[0].localeCompare(right[0]))
+          .map(
+            ([subgroupName, subgroupEntry]) =>
+              [
+                `  - SUBGRUPO: ${subgroupName}`,
+                `      * BUDGET   : ${subgroupEntry.budgetRows} registros | ${formatUsd(subgroupEntry.budgetUsd)} USD`,
+                `      * EJECUTADO: ${subgroupEntry.ejecutadoRows} registros | ${formatUsd(subgroupEntry.ejecutadoUsd)} USD`,
+              ]
+          );
+
+        return [
+          '------------------------------------------------------------',
+          `SITE: ${siteName}`,
+          '------------------------------------------------------------',
+          `TOTAL BUDGET (USD)   : ${formatUsd(siteEntry.budgetUsd)} USD`,
+          `TOTAL EJECUTADO (USD): ${formatUsd(siteEntry.ejecutadoUsd)} USD`,
+          'DETALLES POR SUBGRUPO (USD)',
+          ...detailLines.flat(),
+        ];
+      });
 
     const bodyLines = [
       'Hola,',
       '',
-      'Se comparte el resumen KPI del Excel generado:',
+      '======================== REPORTE KPI DATA ========================',
+      `Fecha de reporte: ${reportDate}`,
+      `Total de filas: ${rows.length}`,
       '',
-      `Total Budget: ${totalsByExercise.Budget.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD`,
-      `Total Ejecutado: ${totalsByExercise.Ejecutado.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD`,
-      `Total General: ${totalMontoUsd.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} USD (${totalMontoSoles.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} Soles)`,
-      `Total Filas: ${rows.length}`,
+      ...siteMailBlocks.flatMap((block) => [...block, '']),
       '',
-      'Totales por Site:',
-      ...siteLines,
-      '',
-      `Archivo sugerido: ${buildFileName()}`,
-      'Adjuntar el excel descargado en el correo antes de enviar.',
+      'ACCION REQUERIDA',
+      `- Adjuntar archivo: ${buildFileName()}`,
+      '- Revisar destinatarios y enviar.',
       '',
       'Saludos.',
     ];
